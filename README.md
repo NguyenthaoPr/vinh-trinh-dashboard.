@@ -1,24 +1,15 @@
-# Giám sát hồ Vĩnh Trinh – THỦY LỢI AI
+# Giám sát hồ Vĩnh Trinh – V1.4 bản đồ tích hợp
 
-Ứng dụng HTML tĩnh, triển khai trực tiếp trên Vercel.
+- Dashboard đọc dữ liệu Google Sheets, chỉ cột A và G.
+- Tự thử đồng bộ khi mở trang và mỗi 5 phút.
+- Bản đồ Leaflet tích hợp ngay trong Dashboard.
+- Nền vệ tinh Esri World Imagery.
+- Có nút bật/tắt Satellite, GIS, Sensor.
+- Có thể nạp lớp GeoJSON từ file trên máy.
+- Chưa gắn tọa độ cảm biến thực và chưa nạp GIS Master/KMZ gốc; không dùng điểm tham chiếu gần đúng làm vị trí công trình chính xác.
 
-## Triển khai GitHub → Vercel
-1. Tạo repository GitHub mới, ví dụ `vinh-trinh-dashboard`.
-2. Tải `index.html`, `vercel.json`, `README.md` lên thư mục gốc repository.
-3. Vào Vercel → Add New → Project → Import Git Repository.
-4. Chọn repository; Framework Preset chọn `Other`; không cần Build Command; Deploy.
+## Deploy
+Thay `index.html` và `vercel.json` trong repository GitHub hiện tại bằng hai file cùng tên ở đây, commit, Vercel tự triển khai.
 
-## Dữ liệu Google Sheets
-- Spreadsheet ID: `1wSqXIT819YCZQEkb3CXxCaBhJU-rVs0d_W6tsulrPfk`
-- GID: `0` (tab DuLieu)
-- Ứng dụng chỉ đọc cột A (Thời gian) và cột G (Mực nước thực tế).
-- Tự thử đồng bộ khi mở trang và lặp lại mỗi 5 phút; có nút đồng bộ thủ công.
-- Google Sheets cần chia sẻ `Bất kỳ ai có đường liên kết` với quyền `Người xem`.
-- Trình duyệt truy cập Google GViz trực tiếp; nếu bị chặn bởi chính sách CORS/quyền chia sẻ, trạng thái sẽ báo lỗi và vẫn giữ dữ liệu mẫu để xem giao diện.
 
-## Tính toán
-- Bảng Z–F–V hiện nhập theo ảnh Bảng 4.7, cao trình +10 đến +34 m.
-- Dung tích được nội suy tuyến tính giữa hai cao trình liền kề.
-
-## Lưu ý
-Đây là công cụ giám sát/mô phỏng ban đầu. Cần đối chiếu toàn bộ bảng Z–F–V gốc, mốc cao độ cảm biến và kết quả đồng bộ thực tế trước khi dùng làm căn cứ điều hành hồ.
+V1.4: Nâng cấp đường biểu đồ bằng nội suy Catmull–Rom/Bezier, đường cong đi qua các điểm đo; tăng độ phân giải canvas theo màn hình Retina. Chỉ làm mượt phần hiển thị, không làm thay đổi dữ liệu gốc.

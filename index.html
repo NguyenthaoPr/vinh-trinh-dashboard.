@@ -56,31 +56,78 @@ function volumeAt(z){
 function dateLabel(s){let d=new Date(s);return isNaN(d)?s:d.toLocaleString("vi-VN",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}
 function delta(a,b){return a-b}
 function drawChart(canvasId,arr,key,color,thresholds=[]){
- const c=document.getElementById(canvasId),ctx=c.getContext("2d"),w=c.clientWidth,h=c.clientHeight,ratio=window.devicePixelRatio||1;
- c.width=w*ratio;c.height=h*ratio;ctx.scale(ratio,ratio);ctx.clearRect(0,0,w,h);
+ const c=document.getElementById(canvasId),ctx=c.getContext("2d");
+ const w=c.clientWidth,h=c.clientHeight,ratio=Math.max(1,window.devicePixelRatio||1);
+ c.width=Math.round(w*ratio);c.height=Math.round(h*ratio);
+ ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,w,h);
  if(!arr.length)return;
- let vals=arr.map(x=>key==="level"?x.level:volumeAt(x.level)).filter(Number.isFinite);if(!vals.length)return;
- let min=Math.min(...vals),max=Math.max(...vals);thresholds.forEach(t=>{min=Math.min(min,t);max=Math.max(max,t)});let pad=(max-min)*.14||1;min-=pad;max+=pad;
- const L=48,R=12,T=14,B=35,pw=w-L-R,ph=h-T-B;
- ctx.font="11px Segoe UI";ctx.strokeStyle="#244357";ctx.fillStyle="#9bb2c2";ctx.lineWidth=1;
- for(let i=0;i<5;i++){let y=T+ph*i/4,v=max-(max-min)*i/4;ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-R,y);ctx.stroke();ctx.fillText(v.toFixed(1),4,y+4)}
- thresholds.forEach(t=>{let y=T+(max-t)/(max-min)*ph;ctx.strokeStyle="#f4b85b";ctx.setLineDash([5,5]);ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-R,y);ctx.stroke();ctx.setLineDash([])});
- const pts=vals.map((v,i)=>({x:L+(vals.length===1?pw/2:i/(vals.length-1)*pw),y:T+(max-v)/(max-min)*ph}));
- // Vùng tô màu bên dưới đường cong
+
+ // Chỉ làm mượt đường vẽ; không thay đổi hay làm sai lệch số liệu đo thực tế.
+ const points=arr.map(x=>({time:x.time,value:key==="level"?x.level:volumeAt(x.level)}))
+   .filter(p=>Number.isFinite(p.value));
+ if(!points.length)return;
+
+ let min=Math.min(...points.map(p=>p.value)),max=Math.max(...points.map(p=>p.value));
+ thresholds.forEach(t=>{min=Math.min(min,t);max=Math.max(max,t)});
+ const span=max-min,pad=span*.16||.5;min-=pad;max+=pad;
+ const L=52,R=14,T=16,B=39,pw=Math.max(10,w-L-R),ph=Math.max(10,h-T-B);
+ const xy=points.map((p,i)=>({
+   x:L+(points.length===1?pw/2:i/(points.length-1)*pw),
+   y:T+(max-p.value)/(max-min)*ph,
+   value:p.value,time:p.time
+ }));
+
+ ctx.font="11px Segoe UI,Arial";ctx.strokeStyle="#244357";ctx.fillStyle="#9bb2c2";ctx.lineWidth=1;
+ for(let i=0;i<5;i++){
+   const y=T+ph*i/4,v=max-(max-min)*i/4;
+   ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-R,y);ctx.stroke();
+   ctx.fillText(v.toFixed(1),4,y+4);
+ }
+ thresholds.forEach(t=>{
+   const y=T+(max-t)/(max-min)*ph;
+   ctx.strokeStyle="#f4b85b";ctx.setLineDash([5,5]);
+   ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-R,y);ctx.stroke();ctx.setLineDash([]);
+ });
+
+ // Catmull–Rom chuyển thành Bezier: đường cong đi qua toàn bộ điểm đo,
+ // hạn chế gãy khúc nhưng không làm thay đổi giá trị gốc.
+ function traceSmooth(){
+   ctx.beginPath();
+   if(xy.length===1){ctx.moveTo(xy[0].x,xy[0].y);return}
+   ctx.moveTo(xy[0].x,xy[0].y);
+   for(let i=0;i<xy.length-1;i++){
+     const p0=xy[Math.max(0,i-1)],p1=xy[i],p2=xy[i+1],p3=xy[Math.min(xy.length-1,i+2)];
+     const dx=(p2.x-p0.x)/6,dy=(p2.y-p0.y)/6;
+     const dx2=(p3.x-p1.x)/6,dy2=(p3.y-p1.y)/6;
+     ctx.bezierCurveTo(p1.x+dx,p1.y+dy,p2.x-dx2,p2.y-dy2,p2.x,p2.y);
+   }
+ }
  const fill=ctx.createLinearGradient(0,T,0,T+ph);
- fill.addColorStop(0,key==="level"?"rgba(66,183,239,.38)":"rgba(49,208,176,.34)");
- fill.addColorStop(1,key==="level"?"rgba(66,183,239,.015)":"rgba(49,208,176,.015)");
- ctx.beginPath();ctx.moveTo(pts[0].x,T+ph);ctx.lineTo(pts[0].x,pts[0].y);
- for(let i=1;i<pts.length;i++){const prev=pts[i-1],cur=pts[i],mx=(prev.x+cur.x)/2;ctx.quadraticCurveTo(prev.x,prev.y,mx,(prev.y+cur.y)/2);}
- if(pts.length>1){const last=pts[pts.length-1];ctx.lineTo(last.x,last.y);}
- ctx.lineTo(pts[pts.length-1].x,T+ph);ctx.closePath();ctx.fillStyle=fill;ctx.fill();
- // Đường biểu diễn được làm mượt bằng đường cong bậc hai
- ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
- for(let i=1;i<pts.length;i++){const prev=pts[i-1],cur=pts[i],mx=(prev.x+cur.x)/2;ctx.quadraticCurveTo(prev.x,prev.y,mx,(prev.y+cur.y)/2);}
- const end=pts[pts.length-1];ctx.lineTo(end.x,end.y);
- ctx.strokeStyle=color;ctx.lineWidth=2.8;ctx.lineCap="round";ctx.lineJoin="round";ctx.shadowColor=color;ctx.shadowBlur=7;ctx.stroke();ctx.shadowBlur=0;
- ctx.fillStyle=color;pts.forEach((pt,i)=>{if(vals.length>45&&i%Math.ceil(vals.length/40)!==0&&i!==vals.length-1)return;ctx.beginPath();ctx.arc(pt.x,pt.y,3,0,Math.PI*2);ctx.fill()});
- [0,Math.floor((arr.length-1)/2),arr.length-1].forEach(i=>{if(i<0)return;let x=L+(arr.length===1?pw/2:i/(arr.length-1)*pw);ctx.fillStyle="#9bb2c2";ctx.fillText(dateLabel(arr[i].time),Math.max(L,Math.min(w-95,x-28)),h-10)});
+ fill.addColorStop(0,key==="level"?"rgba(66,183,239,.34)":"rgba(49,208,176,.30)");
+ fill.addColorStop(1,key==="level"?"rgba(66,183,239,.01)":"rgba(49,208,176,.01)");
+ traceSmooth();
+ ctx.lineTo(xy[xy.length-1].x,T+ph);ctx.lineTo(xy[0].x,T+ph);ctx.closePath();
+ ctx.fillStyle=fill;ctx.fill();
+
+ traceSmooth();
+ ctx.strokeStyle=color;ctx.lineWidth=2.7;ctx.lineCap="round";ctx.lineJoin="round";
+ ctx.shadowColor=color;ctx.shadowBlur=6;ctx.stroke();ctx.shadowBlur=0;
+
+ // Các chấm là số liệu thực đo, giữ nguyên vị trí chính xác.
+ const step=Math.max(1,Math.ceil(xy.length/45));
+ xy.forEach((pt,i)=>{
+   if(i%step!==0&&i!==xy.length-1)return;
+   ctx.beginPath();ctx.arc(pt.x,pt.y,2.6,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();
+ });
+ const labelIdx=[0,Math.floor((xy.length-1)/2),xy.length-1];
+ labelIdx.forEach((i,j)=>{
+   const pt=xy[i];if(!pt)return;
+   const label=dateLabel(pt.time),tw=ctx.measureText(label).width;
+   let x=pt.x-tw/2;
+   if(j===0)x=L;if(j===2)x=w-R-tw;
+   x=Math.max(L,Math.min(w-R-tw,x));
+   ctx.fillStyle="#9bb2c2";ctx.fillText(label,x,h-10);
+ });
 }
 function render(){
  data=data.filter(x=>Number.isFinite(x.level)&&x.time).sort((a,b)=>new Date(a.time)-new Date(b.time));
