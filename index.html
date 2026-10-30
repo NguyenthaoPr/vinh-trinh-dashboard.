@@ -31,6 +31,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 const SHEET_ID="1wSqXIT819YCZQEkb3CXxCaBhJU-rVs0d_W6tsulrPfk", GID="0";
+let lastSuccessfulSync=null, syncInProgress=false;
 let data=[{"time": "2026-10-30T10:55:02.737000", "level": 28.562}, {"time": "2026-10-30T11:00:02.466000", "level": 28.556}, {"time": "2026-10-30T11:05:02.849000", "level": 28.556}, {"time": "2026-10-30T11:10:02.243000", "level": 28.431}, {"time": "2026-10-30T11:15:02.661000", "level": 29.567}, {"time": "2026-10-30T11:20:02.409000", "level": 29.567}, {"time": "2026-10-30T11:25:02.392000", "level": 29.567}, {"time": "2026-10-30T11:30:02.839000", "level": 29.567}, {"time": "2026-10-30T11:35:02.030000", "level": 28.065}, {"time": "2026-10-30T11:40:02.715000", "level": 28.061}, {"time": "2026-10-30T11:45:02.851000", "level": 28.148}, {"time": "2026-10-30T11:50:01.973000", "level": 28.143}, {"time": "2026-10-30T11:55:01.967000", "level": 28.075}, {"time": "2026-10-30T12:00:03.158000", "level": 27.977}, {"time": "2026-10-30T12:05:02.873000", "level": 27.723}, {"time": "2026-10-30T12:10:02.487000", "level": 27.732}, {"time": "2026-10-30T12:15:02.947000", "level": 27.727}, {"time": "2026-10-30T12:20:02.838000", "level": 27.727}, {"time": "2026-10-30T12:25:02.665000", "level": 27.732}, {"time": "2026-10-30T12:30:02.851000", "level": 28.159}, {"time": "2026-10-30T12:35:03.269000", "level": 28.156}, {"time": "2026-10-30T12:40:03.052000", "level": 28.153}, {"time": "2026-10-30T12:45:02.440000", "level": 28.154}, {"time": "2026-10-30T12:50:02.790000", "level": 28.158}, {"time": "2026-10-30T12:55:02.236000", "level": 28.158}, {"time": "2026-10-30T13:00:02.576000", "level": 28.159}, {"time": "2026-10-30T13:05:03.418000", "level": 28.158}, {"time": "2026-10-30T13:10:02.732000", "level": 28.159}, {"time": "2026-10-30T13:15:03.201000", "level": 28.159}], zfv=[[10, 0, 0], [11, 0.0088, 0.0029], [12, 0.0719, 0.0382], [13, 0.1447, 0.1444], [14, 0.2463, 0.3376], [15, 0.3357, 0.6275], [16, 0.4491, 1.0185], [17, 0.6156, 1.5487], [18, 0.8029, 2.2558], [19, 1.003, 3.1569], [20, 1.2067, 4.2602], [21, 1.4233, 5.5737], [22, 1.6101, 7.0894], [23, 1.8218, 8.8042], [24, 2.0253, 10.7269], [25, 2.2218, 12.8497], [26, 2.4268, 15.1733], [27, 2.6576, 17.7146], [28, 2.8929, 20.489], [29, 3.145, 23.507], [30, 3.4743, 26.8153], [31, 3.8808, 30.491], [32, 4.1418, 34.5015], [33, 4.2049, 37.6748], [34, 4.5156, 43.0341]];
 const MNDBT=29.35, V_MNDBT=24.66, Z_DEAD=16.2, V_DEAD=1.12, Z_FLOOD=31.02, Z_CHECK=31.37;
 const fmt=(n,d=3)=>Number(n).toLocaleString("vi-VN",{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -92,14 +93,16 @@ function render(){
 }
 function setStatus(t,ok=false){let el=document.getElementById("status");el.textContent=(ok?"● ":"● ")+t;el.style.color=ok?"#31d0b0":"#f4b85b"}
 async function syncSheet(){
- setStatus("Đang thử đọc Google Sheets…");
+ if(syncInProgress)return; syncInProgress=true;
+ setStatus("Đang đọc Google Sheets…");
  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${GID}&range=A:G&headers=1`;
  try{
-  let res=await fetch(url);if(!res.ok)throw new Error("HTTP "+res.status);let txt=await res.text();let m=txt.match(/google\\.visualization\\.Query\\.setResponse\\((.*)\\);?$/s);if(!m)throw new Error("Không nhận được dữ liệu GViz");
+  let res=await fetch(url);if(!res.ok)throw new Error("HTTP "+res.status);let txt=await res.text();let m=txt.match(/google\.visualization\.Query\.setResponse\((.*)\);?$/s);if(!m)throw new Error("Không nhận được dữ liệu GViz");
   let obj=JSON.parse(m[1]),rows=obj.table.rows||[],out=[];
-  rows.forEach(r=>{let a=r.c?.[0],g=r.c?.[6];if(!a||!g||g.v===null)return;let av=a.v;let time;if(typeof av==="string"&&av.startsWith("Date(")){let nums=av.match(/\\d+/g).map(Number);time=new Date(nums[0],nums[1],nums[2],nums[3]||0,nums[4]||0,nums[5]||0).toISOString()}else time=new Date(av).toISOString();out.push({time,level:Number(g.v)})});
-  if(!out.length)throw new Error("Không tìm thấy dữ liệu hợp lệ ở cột A và G");data=out;render();setStatus("Đã đồng bộ Google Sheets · "+out.length+" bản ghi · chỉ đọc A và G",true);
- }catch(e){setStatus("Chưa đọc trực tiếp được: "+e.message+". Có thể dùng Tải Excel/CSV hoặc triển khai ứng dụng trên web.");}
+  rows.forEach(r=>{let a=r.c?.[0],g=r.c?.[6];if(!a||!g||g.v===null)return;let av=a.v;let time;if(typeof av==="string"&&av.startsWith("Date(")){let nums=av.match(/\d+/g).map(Number);time=new Date(nums[0],nums[1],nums[2],nums[3]||0,nums[4]||0,nums[5]||0).toISOString()}else time=new Date(av).toISOString();out.push({time,level:Number(g.v)})});
+  if(!out.length)throw new Error("Không tìm thấy dữ liệu hợp lệ ở cột A và G");data=out;render();lastSuccessfulSync=new Date();setStatus("Đã đồng bộ Google Sheets · "+out.length+" bản ghi · cập nhật "+lastSuccessfulSync.toLocaleTimeString("vi-VN")+" · chỉ đọc A và G",true);
+ }catch(e){setStatus("Chưa đồng bộ được Google Sheets: "+e.message+". Kiểm tra quyền Người xem và kết nối Internet.");}
+ finally{syncInProgress=false;}
 }
 document.getElementById("sync").onclick=syncSheet;document.getElementById("range").onchange=render;
 document.getElementById("uploadBtn").onclick=()=>document.getElementById("fileInput").click();
@@ -109,4 +112,7 @@ document.getElementById("fileInput").onchange=async e=>{let f=e.target.files[0];
  render();setStatus("Đã nạp "+f.name+" · "+data.length+" bản ghi",true)
  }catch(err){setStatus("Lỗi đọc file: "+err.message)}};
 window.addEventListener("resize",render);render();
+// Tự đồng bộ khi mở ứng dụng và lặp lại mỗi 5 phút.
+setTimeout(syncSheet,1200);
+setInterval(syncSheet,5*60*1000);
 </script></body></html>
